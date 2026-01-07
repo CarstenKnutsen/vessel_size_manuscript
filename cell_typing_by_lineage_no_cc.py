@@ -1,7 +1,5 @@
 """Goal:Cell typing by lineage with the cell cycle genes regressed out
-Date:250115
-Author: Carsten Knutsen
-conda_env:trajectory_inference
+conda_env:vessel_size
 """
 
 import pandas as pd
@@ -176,14 +174,7 @@ leiden_ct_dict = {
         "10": "Striated muscle",
         "11":"Mesothelial",
         "12":"Dsc2_3+ cell",
-        # "13":"Alveolar fibroblast",
-        # "14": "Alveolar fibroblast",
-        # "15": "Alveolar fibroblast",
-        # "16":"Abberant muscle",
-        # "17": "Eya4+ cell",
-        # "18": "Striated muscle",
-        # "19": "Dsc2_3+ cell",
-        # "20": "Alveolar fibroblast",
+
     },
     "Endothelial": {
         "0": "Cap1",
@@ -197,11 +188,7 @@ leiden_ct_dict = {
         "8":  "Venous EC",
         "9":  "Systemic Venous EC",
         "10": "low-quality_Lymphatic EC",
-        # "11": "low-quality_Arterial EC",
-        # "12": "low-quality_Lymphatic EC",
-        # "13": "low-quality_Arterial EC",
-        # "14": "low-quality_Lymphatic EC",
-        # "15": "low-quality_Arterial EC",
+
     },
     "Immune": {
         "0": "Alveolar macrophage",
@@ -254,14 +241,15 @@ if __name__ == "__main__":
     sc.tl.score_genes_cell_cycle(adata, s_genes=s_genes, g2m_genes=g2m_genes)
     sc.tl.score_genes(adata, cell_cycle_genes, score_name='proliferation_score')
     sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
-    adata.layers['log1p_cc_regress'] = sparse.csr_matrix(adata.X).copy()
-    adata.X = adata.layers['log1p'].copy()
+    # adata.layers['log1p_cc_regress'] = sparse.csr_matrix(adata.X).copy()
+    ## for not rerunning cc regression
+    # adata.X = adata.layers['log1p'].copy()
     # adata.write(
     #     f"{data}/{adata_name}_celltyped_log1p_regress.gz.h5ad", compression="gzip"
     # )
     # adata = sc.read( f"{data}/{adata_name}_celltyped_log1p_regress.gz.h5ad")
-    adata.X = adata.layers['log1p_cc_regress'].copy()
-    del adata.layers['log1p_cc_regress']
+    # adata.X = adata.layers['log1p_cc_regress'].copy()
+    # del adata.layers['log1p_cc_regress']
     adata.obs["Cell Subtype_no_cc"] = pd.Series(index=adata.obs.index, data=None, dtype="str")
     for lineage in adata.obs['Lineage'].cat.categories:
         figures_lin = f"{figures}/{lineage}"
@@ -308,7 +296,11 @@ if __name__ == "__main__":
                                                lin_adata.obs[f"leiden_{lineage}_no_cc"]]
         lin_adata = lin_adata[(~lin_adata.obs["Cell Subtype_no_cc"].str.startswith('doublet')) & (~lin_adata.obs["Cell Subtype_no_cc"].str.startswith('low-quality'))]
         umap_dist = {'Endothelial':1,'Epithelial':1,'Mesenchymal':1,'Immune':1}
-        sc.tl.umap(lin_adata, min_dist=umap_dist[lineage])
+        sc.tl.umap(lin_adata,
+                   # min_dist=umap_dist[lineage]
+        min_dist = 0.75
+
+        )
         sc.pl.umap(lin_adata, color=['Treatment', 'Library', 'leiden', f"leiden_{lineage}", f"leiden_{lineage}_no_cc",
                                      'celltype_rough', "Cell Subtype", "Cell Subtype_no_cc"], wspace=0.5, show=False,
                    save='_posttrim_leiden')
@@ -370,7 +362,7 @@ if __name__ == "__main__":
     sc.pp.highly_variable_genes(adata, batch_key="Library")
     sc.pp.pca(adata, mask_var="highly_variable")
     sc.pp.neighbors(adata, use_rep="X_pca")
-    sc.tl.umap(adata, min_dist=0.75)
+    sc.tl.umap(adata, min_dist=0.5)
     adata.obs['Cell Subtype_no_cc'] = pd.Categorical(adata.obs['Cell Subtype_no_cc'], categories=ct_order)
     sc.settings.figdir = figures
     sc.pl.umap(adata, color='Cell Subtype_no_cc', save='Cell_Subtype', show=False)

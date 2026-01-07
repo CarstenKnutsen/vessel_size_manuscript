@@ -1,7 +1,5 @@
 """Goal:Cell typing by lineage
-Date:250104
-Author: Carsten Knutsen
-conda_env:trajectory_inference
+conda_env:vessel_size
 """
 
 import pandas as pd

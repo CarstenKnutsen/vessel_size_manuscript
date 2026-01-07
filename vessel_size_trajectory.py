@@ -1,7 +1,5 @@
-'''Goal:Trajectory inference for vessels and mural
-Date:250205
-Author: Carsten Knutsen
-conda_env:trajectory_inference
+'''Goal:Trajectory inference for venous ec
+conda_env:vessel_size
 '''
 
 
@@ -31,10 +29,6 @@ comps = {
                  'root_ct':'Cap1',
                  'terminal_cts':['Arterial EC', 'Venous EC']
                  },
-    'mural': {'cts': ['Pericyte', 'Vascular smooth muscle'],
-                    'root_ct': 'Pericyte',
-                    'terminal_cts': ['Vascular smooth muscle']
-                    },
 
 }
 celltype = 'Cell Subtype_no_cc'
@@ -66,10 +60,10 @@ def run_velocity_routine(adata,adata_v,celltype,root_ct,terminal_cts,figure_dir,
     scv.tl.latent_time(adata_v_trim)
     scv.tl.terminal_states(adata_v_trim)
     scv.tl.velocity_pseudotime(adata_v_trim)
-    scv.tl.paga(adata_v_trim, groups=celltype)
+    # scv.tl.paga(adata_v_trim, groups=celltype)
     scv.pl.scatter(adata_v_trim, color=["root_cells", "end_points"],
                    save='_velocity_states.png')
-    scv.pl.paga(adata_v_trim, groups=celltype,save='_celltype_paths.png')
+    # scv.pl.paga(adata_v_trim, groups=celltype,save='_celltype_paths.png')
     adata_v_trim.X = adata_v_trim.layers['log1p'].copy()
     palantir.utils.run_diffusion_maps(adata_v_trim,
                                                n_components=5)
@@ -109,6 +103,7 @@ def run_velocity_routine(adata,adata_v,celltype,root_ct,terminal_cts,figure_dir,
             # Return the cell name
             terminal_states.append(subset.obs_names[min_idx])
         terminal_states = pd.Series(index=terminal_states, data=terminal_cts, dtype='object')
+
 
 
     fig = palantir.plot.highlight_cells_on_umap(adata_v_trim, [root_cell]+terminal_states)[0]
@@ -173,8 +168,6 @@ def run_velocity_routine(adata,adata_v,celltype,root_ct,terminal_cts,figure_dir,
 
 if __name__ == '__main__':
     adata = sc.read(f'{data}/{adata_name}_celltyped_no_cc.gz.h5ad')
-
-
     adata.uns['Cell Subtype_no_cc_colors'][0] = '#4A90E2' # Art
     adata.uns['Cell Subtype_no_cc_colors'][1] = '#9B59B6' # Cap1
     adata.uns['Cell Subtype_no_cc_colors'][6] = '#E35D6A' # Ven

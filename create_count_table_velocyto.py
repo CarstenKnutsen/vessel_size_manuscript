@@ -1,7 +1,5 @@
-'''Goal:Create vekocyto count h5ad
-Date:231222
-Author: Carsten Knutsen
-conda_env:trajectory_inference
+'''Goal:Create count table for all cells after SoupX cleanup of tbx2 ko samples
+conda_env:vessel_size
 '''
 
 

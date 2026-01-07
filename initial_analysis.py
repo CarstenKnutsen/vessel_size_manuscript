@@ -1,7 +1,5 @@
-"""Goal:Initial analysis of EC enriched scRNAseq, creating h5ad, filtering, and embedding
-Date:241231
-Author: Carsten Knutsen
-conda_env:trajectory_inference
+"""Goal:Initial analysis of venous ec scRNAseq, creating h5ad, filtering, and embedding
+conda_env:vessel_size
 """
 
 import pandas as pd
