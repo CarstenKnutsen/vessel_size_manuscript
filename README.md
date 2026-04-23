@@ -37,6 +37,7 @@ All subsquent analysis follows in the order of script_pipeline.sh
     - bhattacharya_vessel_size.py
     - lungmap_vessel_size.py
     - tabula_sapiens_vessel_size.py
+    - zhao_vessel_size.py
 - integrate_all_vessel_size.py
   - Integrate all datasets vessel size scoring, create figures for Sveiven and Knutsen et al.
 
