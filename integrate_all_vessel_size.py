@@ -13,8 +13,10 @@ import palantir
 import gprofiler
 import anndata
 from gprofiler import GProfiler
+from upsetplot import from_contents, UpSet
+import scipy as sp
 
-figures = "data/figures/figures_tmp/"
+figures = "data/figures/figures/"
 figures_out = f'{figures}/integrate_all'
 os.makedirs(figures_out, exist_ok=True)
 sc.set_figure_params(dpi_save=300, fontsize=10, figsize=(1.5,1.5))
@@ -26,8 +28,6 @@ sns.set_style('white', rc={
 plt.rcParams["font.family"] = "Arial"
 size=5
 sc.settings.autoshow = False
-
-
 def convert_mouse_to_human(adata):
     """Convert var_names in an AnnData object from mouse to human gene names using gProfiler."""
     gp = GProfiler(return_dataframe=True)
@@ -43,14 +43,12 @@ def convert_mouse_to_human(adata):
     # Remove duplicates (if any)
     adata.var_names_make_unique()
     return adata
-
-
 if __name__ == '__main__':
     adata_dict = {}
-
     adata = sc.read(f'{figures}/hurskainen_2021/vessel_size.gz.h5ad')
     adata.x = adata.layers['log1p'].copy()
     del adata.layers
+    adata.var['mouse_genes'] = adata.var_names.copy()
     adata = convert_mouse_to_human(adata)
     adata.obs['Species'] = 'Mouse'
     adata.obs['Age'] = 'Neonatal'
@@ -58,9 +56,8 @@ if __name__ == '__main__':
 
     adata = sc.read(f'{figures}/tabula_muris_senis/vessel_size.gz.h5ad')
     del adata.layers
-    print(adata.var_names)
+    adata.var['mouse_genes'] = adata.var_names.copy()
     adata = convert_mouse_to_human(adata)
-    print(adata.var_names)
     del adata.raw
     adata.obs['Species'] = 'Mouse'
     adata.obs['Age'] = 'Adult'
@@ -69,18 +66,17 @@ if __name__ == '__main__':
     adata = sc.read(f"data/single_cell_files/scanpy_files/venous_ec_vessel_size_plot.gz.h5ad")
     adata.X = adata.layers['log1p']
     del adata.layers
+    adata.var['mouse_genes'] = adata.var_names.copy()
     adata = convert_mouse_to_human(adata)
     adata.obs['Cell Subtype'] = adata.obs['Cell Subtype_no_cc'].copy()
     adata.obs['Species'] = 'Mouse'
     adata.obs['Age'] = 'Neonatal'
-    adata_dict['Sveiven 2025'] = adata
-
+    adata_dict['Sveiven 2026'] = adata
     adata = sc.read(f'{figures}/bhattacharya_2024/vessel_size.gz.h5ad')
     del adata.layers
     adata.obs['Species'] = 'Human'
     adata.obs['Age'] = 'Neonatal'
     adata_dict['Bhattacharya 2024'] = adata
-
     adata = sc.read(f'{figures}/tabula_sapiens/vessel_size.gz.h5ad')
     del adata.layers
     adata.obs['Species'] = 'Human'
@@ -91,9 +87,96 @@ if __name__ == '__main__':
     adata_dict['LungMAP 2024'] = adata
     adata.obs['Species'] = 'Human'
     adata.obs['Age'] = 'Neonatal'
-    for x in adata_dict:
-        print(x)
-        print(adata_dict[x].var_names)
+    adata = sc.read(f'{figures}/zhao_2024/vessel_size.gz.h5ad')
+    adata.x = adata.layers['log1p'].copy()
+    del adata.layers
+    adata.var['mouse_genes'] = adata.var_names.copy()
+    adata = convert_mouse_to_human(adata)
+    adata.obs['Species'] = 'Mouse'
+    adata.obs['Age'] = 'Adult'
+    adata_dict['Zhao 2024'] = adata
+    ## Create upset plot to show vessel size signature overlap
+    gene_dict = {}
+    gp = GProfiler(return_dataframe=True)
+    for ds in adata_dict:
+        # if ds == 'Zhao 2024':
+        #     continue
+        adata = adata_dict[ds]
+        print(ds)
+        gene_ls = adata.uns['large_genes'].tolist() + adata.uns['small_genes'].tolist()
+        if 'Mouse' in adata.obs['Species'].unique():
+            conversion_df = gp.orth(organism='mmusculus', query=gene_ls, target='hsapiens')
+            conversion_df.loc[conversion_df["name"] == "N/A", "name"] = conversion_df.loc[
+                conversion_df["name"] == "N/A", "incoming"].str.upper()
+            gene_ls = conversion_df.name.values.tolist()
+        gene_dict[ds] = gene_ls
+    upset = from_contents(gene_dict)
+    membership_df = upset.reset_index()
+    groups = membership_df.columns[:-1]  # set columns
+    item_col = membership_df.columns[-1]  # item column
+    membership_df["intersection"] = (
+        membership_df[groups]
+        .apply(lambda r: ",".join(groups[r]), axis=1)
+    )
+    intersection_lists = (
+        membership_df.groupby("intersection")[item_col]
+        .apply(list)
+        .reset_index()
+    )
+    intersection_lists.to_csv(f"{figures_out}/upset_intersections.csv", index=False)
+    print(upset)
+    ax_dict = UpSet(upset, sort_by='cardinality',subset_size="count").plot()
+    plt.savefig(f'{figures_out}/upset_plot_shared_genes_signature.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    ## Make same plots of genes to compare across datasets
+    gene_ls_dict = {'shared_size': [
+        'Ccdc85a',
+        'Glp1r',
+        'Kit',
+        'Sox4', 'Nrp1', 'Ifitm3',
+        'Ptprr', 'Adgrg6', 'Foxo1',
+        'Mgp', 'Eln', 'Nr4a2',
+    ][::-1],
+                    'size_axis': ['Dkk2', 'Sox6',
+                                  'Lama3', 'Bdkrb2',
+                                  'Stc1',
+                                  'Adam23', 'Ntrk2',
+                                  'Emid1', 'Chrm2',
+                                  'Chrm3', 'Rarb',
+                                  'Gria3',
+                                  'Ptger3', 'Moxd1',
+                                  ],
+                    'umap_genes':['Eln','Mgp','Mecom','Col4a1','Col4a2']
+                    }
+    for ds in adata_dict:
+        if ds == 'Sveiven 2026':
+            continue
+        print(ds)
+        adata = adata_dict[ds]
+        for x in gene_ls_dict:
+            gene_ls = gene_ls_dict[x].copy()
+            if 'Human' in adata.obs['Species'].unique():
+                gp = GProfiler(return_dataframe=True)
+                conversion_df = gp.orth(organism='mmusculus', query=gene_ls, target='hsapiens')
+                conversion_df.loc[conversion_df["name"] == "N/A", "name"] = conversion_df.loc[
+                    conversion_df["name"] == "N/A", "incoming"].str.upper()
+                gene_ls = conversion_df.name.values.tolist()
+                gene_ls = [x for x in gene_ls if x in adata.var_names]
+                gene_symbols = None
+            else:
+                gene_ls = [x for x in gene_ls if x in adata.var['mouse_genes'].values]
+                gene_symbols = 'mouse_genes'
+
+            sc.pl.DotPlot(adata, gene_ls, groupby='ct_s',
+                          gene_symbols=gene_symbols,
+                          title=ds,
+                          categories_order=['PAEC L', 'PAEC M', 'PAEC S', 'Cap1', 'PVEC S', 'PVEC M', 'PVEC L'],
+                          standard_scale='var').style(cmap='viridis').savefig(
+                f'{figures_out}/{x}_{ds}_dotplot_size_axis.png', dpi=300,
+                bbox_inches='tight')
+            if x =='umap_genes':
+                for gene in gene_ls:
+                    sc.pl.umap(adata, color=gene, gene_symbols=gene_symbols,cmap='viridis', frameon=False, size=size, save=f'_{gene}_{ds}.png')
 
     adata = anndata.concat(adata_dict.values(), join='inner', label='Dataset', keys=adata_dict.keys(), index_unique=None)
     del adata.obsm
@@ -138,4 +221,46 @@ if __name__ == '__main__':
         sc.pl.umap(adata.copy(),color=['Dataset'],cmap='viridis',mask_obs=adata.obs['Dataset']==dataset,title='',legend_loc=None,frameon=False,size=size,save=F'_{dataset}_dataset.png')
         sc.pl.umap(adata.copy(),color='Vessel size category',mask_obs=adata.obs['Dataset']==dataset,title='',legend_loc=None,frameon=False,size=size,save=F'_{dataset}_dataset_vessel_size.png')
         sc.pl.umap(adata.copy(),color='Vessel size score',mask_obs=adata.obs['Dataset']==dataset,cmap='Oranges',title='',colorbar_loc=None,frameon=False,size=size,save=F'_{dataset}_dataset_vessel_size_score.png')
+    ## create scatter and violin to show vessel size score correlation between neighbors of datasets
+    obs_key = "Vessel size score"
+    dataset_key = "Dataset"
+    vals = adata.obs[obs_key].values
+    datasets = adata.obs[dataset_key].values
+    conn = adata.obsp["connectivities"]
+    neighbor_median = np.zeros(adata.n_obs)
+    for i in range(adata.n_obs):
+        neighbors = conn[i].indices  # neighbor indices
+        valid_neighbors = neighbors[datasets[neighbors] != datasets[i]]
+        if len(valid_neighbors) > 0:
+            neighbor_median[i] = np.median(vals[valid_neighbors])
+        else:
+            neighbor_median[i] = np.nan  # no cross-dataset neighbors
+    adata.obs[f"{obs_key}_neighbor_median_cross_dataset"] = neighbor_median
+    adata.write(f'{figures_out}/vessel_size_all_datasets.gz.h5ad',compression='gzip')
+    ## make plots showing correlation
+    df = adata.obs[['Vessel size score', 'Vessel size score_neighbor_median_cross_dataset', 'Dataset']]
+    df = df.dropna()
+    df['bins'] = pd.cut(df['Vessel size score'], bins=10)
+    joint_plot = sns.jointplot(x=df['Vessel size score'], y=df['Vessel size score_neighbor_median_cross_dataset'],
+                               kind='reg',
+                               scatter_kws={'s': 0.1, 'linewidths': 0},
+                               line_kws={'color': 'red'}, height=2)
+    joint_plot.set_axis_labels("Vessel size score", "Vessel size score\nneighbor median")
+    r, p = sp.stats.pearsonr(df['Vessel size score'], df['Vessel size score_neighbor_median_cross_dataset'])
+    joint_plot.ax_marg_x.text(0.5, 1.05, 'r = {:.2f}'.format(r, p), fontsize=10,
+                              transform=joint_plot.ax_marg_x.transAxes)
+    joint_plot.ax_joint.set_ylim([0, 1])
+    joint_plot.ax_joint.set_yticks([0, 0.5, 1])
+    joint_plot.savefig(f'{figures_out}/jointplot_neighbors.png', dpi=300, bbox_inches='tight')
+    plt.close
+    fig, ax = plt.subplots(1, 1, figsize=(2, 2))
+
+    sns.violinplot(df, x='bins', y='Vessel size score_neighbor_median_cross_dataset', ax=ax)
+    ax.set_xticklabels([f'{str(x)[:3]}-{str(x + 0.1)[:3]}' for x in np.arange(0, 1, 0.1)]
+                       , rotation=90)
+    ax.set_xlabel('Vessel size score')
+    ax.set_ylabel('Vessel size score\nneighbor median')
+    fig.savefig(f'{figures_out}/violinplot_neighbors.png', dpi=300, bbox_inches='tight')
+
+
 

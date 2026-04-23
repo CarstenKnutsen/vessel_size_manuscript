@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import palantir
 import cellrank as cr
 import scvelo as scv
-from functions import palantir_psuedotime_routine_external_datasets,find_gene_overlap_in_pseudotimes,
+from functions import palantir_psuedotime_routine_external_datasets,find_gene_overlap_in_pseudotimes
 
 adata_name='lungmap_bpd_2024'
 figures = "data/figures/figures/lungmap_bpd_2024"

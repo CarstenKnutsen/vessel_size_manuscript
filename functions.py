@@ -538,6 +538,7 @@ def normalize_dataframe(df):
 
 def find_gene_overlap_in_pseudotimes(adata, celltype_obs='Cell Subtype', cts=['Arterial EC','Venous EC'], top_n_genes=50, pseudotime_key='palantir_pseudotime',size=15,
                                      save_prefix=None, adata_name=None):
+    from matplotlib_venn import venn2, venn3
     corr_dfs = {}
     for ct in cts:
         ct_adata = adata[adata.obs[celltype_obs] == ct]
@@ -595,6 +596,22 @@ def find_gene_overlap_in_pseudotimes(adata, celltype_obs='Cell Subtype', cts=['A
     adata.obs['Vessel size score'] = scaler.fit_transform(adata.obs[['Vessel size score']])
     adata.obs['Vessel size category'] = pd.cut(adata.obs['Vessel size score'], bins=4,
                                                labels=['capillary', 'small', 'medium', 'large'])
+    ls = []
+    for x, y in zip(adata.obs['Cell Subtype'], adata.obs['Vessel size category']):
+        if x == 'Cap1':
+            ls.append('Cap1')
+        else:
+            if y == 'capillary':
+                ls.append(f'Cap1')
+                continue
+            if x == 'Arterial EC':
+                x = 'PAEC'
+            else:
+                x = 'PVEC'
+            ls.append(f'{x} {y[0].upper()}')
+    adata.obs['ct_s'] = ls
+    adata.uns['large_genes'] =large_genes
+    adata.uns['small_genes'] = small_genes
     sc.pl.umap(adata, color=['Vessel size score'], cmap='Oranges', size=size, frameon=False,
                save=f'_{adata_name}_vessel_size_score.png')
     sc.pl.umap(adata, color=['Vessel size category'], cmap='viridis', size=size, frameon=False,

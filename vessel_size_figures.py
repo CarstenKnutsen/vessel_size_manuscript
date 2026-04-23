@@ -8,6 +8,7 @@ import scanpy as sc
 import os
 import pandas as pd 
 import numpy as np
+from matplotlib_venn import venn3
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -31,6 +32,80 @@ size=30
 sc.settings.autoshow = False
 
 if __name__ == '__main__':
+    # for supplemental compare veseesl size scores by splititing treatment
+    fols = {'all': 'data/figures/vessel_size_calculations',
+            'Normoxia': 'data/figures/vessel_size_calculations/Normoxia',
+            'Hyperoxia': 'data/figures/vessel_size_calculations/Hyperoxia',
+            }
+    dfs = {}
+    for fol in fols:
+        dfs[fol] = pd.read_csv(f'{fols[fol]}/select_obs.csv', index_col=0)
+
+    all_df = dfs['all']
+    split_df = pd.concat([dfs['Normoxia'], dfs['Hyperoxia']])
+
+    all_df = all_df.sort_index()
+    split_df = split_df.sort_index()
+    delta = all_df['Vessel size score'] - split_df['Vessel size score']
+    delta = pd.DataFrame(delta)
+    delta['Treatment'] = ['Normoxia' if 'Nox' in x else 'Hyperoxia' for x in delta.index]
+
+    fig, axs = plt.subplots(1, 2, figsize=(4, 2))
+    axs = axs.ravel()
+    plt.subplots_adjust(wspace=0.75)
+    sns.regplot(x=all_df['Vessel size score'], y=split_df['Vessel size score'], scatter_kws={'s': 3, 'linewidths': 0},
+                line_kws={'color': 'red'}, ci=None, ax=axs[0])
+    axs[0].set_xlabel('Vessel size score\ntogether')
+    axs[0].set_ylabel('Vessel size score\nsplit')
+    r, p = sp.stats.pearsonr(all_df['Vessel size score'], split_df['Vessel size score'])
+    axs[0].text(0.5, 1.05, 'r = {:.2f}'.format(r, p), fontsize=10,
+                transform=axs[0].transAxes)
+    sns.violinplot(delta, x='Treatment', y='Vessel size score', order=['Normoxia', 'Hyperoxia'],
+                   palette=sns.color_palette('tab10'), ax=axs[1])
+    axs[1].set_ylabel('Vessel size score delta')
+    axs[1].set_xticklabels(axs[1].get_xticklabels(), rotation=45)
+    axs[1].set_xlabel('')
+
+    fig.savefig(f'{figures}/vessel_size_calculation_comparison.png', bbox_inches='tight', dpi=300)
+    plt.close()
+    # make venn diagram to show overlap
+    fols = {'all': 'data/figures/vessel_size_calculations',
+            'Normoxia': 'data/figures/vessel_size_calculations/Normoxia',
+            'Hyperoxia': 'data/figures/vessel_size_calculations/Hyperoxia',
+            }
+    dfs = {}
+    for fol in fols:
+        dfs[fol] = pd.read_csv(f'{fols[fol]}/top50_shared_corr_df.csv', index_col=0)
+
+    venn = venn3([set(dfs['all']['large_genes'].dropna().values.tolist()),
+                  set(dfs['Normoxia']['large_genes'].dropna().values.tolist()),
+                  set(dfs['Hyperoxia']['large_genes'].dropna().values.tolist(),
+                      )],
+                 set_labels=('Together', 'Normoxia', 'Hyperoxia'),
+                 alpha=0.7)
+    for text in venn.set_labels:
+        text.set_fontsize(12)
+    for text in venn.subset_labels:
+        if text:
+            text.set_fontsize(12)
+    plt.title("Large genes")
+    plt.savefig(f'{figures}/venn_diagram_large_across_methods.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    venn = venn3([set(dfs['all']['small_genes'].dropna().values.tolist()),
+                  set(dfs['Normoxia']['small_genes'].dropna().values.tolist()),
+                  set(dfs['Hyperoxia']['small_genes'].dropna().values.tolist(),
+                      )],
+                 set_labels=('Together', 'Normoxia', 'Hyperoxia'),
+                 alpha=0.7)
+    for text in venn.set_labels:
+        text.set_fontsize(12)
+    for text in venn.subset_labels:
+        if text:
+            text.set_fontsize(12)
+    plt.title("Small genes")
+    plt.savefig(f'{figures}/venn_diagram_small_across_methods.png', dpi=300, bbox_inches='tight')
+    plt.close()
     ## Make plots needing all cell types, mostly figure 1 and supplementals
     adata_all = sc.read(f'{data}/{adata_name}_celltyped_no_cc.gz.h5ad')
     del adata_all.layers
@@ -53,8 +128,10 @@ if __name__ == '__main__':
     adata_all.uns['Cell Subtype_no_cc_colors'][0] = '#4A90E2' # Art
     adata_all.uns['Cell Subtype_no_cc_colors'][1] = '#9B59B6' # Cap1
     adata_all.uns['Cell Subtype_no_cc_colors'][6] = '#E35D6A' # Ven
-    adata_all.uns['Cell Subtype_no_cc_colors'][-1] = '#48C774' # VSM
-    adata_all.uns['Cell Subtype_no_cc_colors'][-4] = '#F5C542' # Per
+    adata_all.uns['Cell Subtype_colors'][0] = '#4A90E2'  # Art
+    adata_all.uns['Cell Subtype_colors'][1] = '#9B59B6'  # Cap1
+    adata_all.uns['Cell Subtype_colors'][8] = '#E35D6A'  # Ven
+    print(adata_all.uns['Cell Subtype_no_cc_colors'][:7])
     cts = ['Arterial EC','Cap1','Venous EC']
     ###Cell Subtype umap
     sc.pl.umap(adata_all,
@@ -98,7 +175,80 @@ if __name__ == '__main__':
                legend_fontoutline=1,
                save='celltypes.png'
                )
-    sc.pl.DotPlot(adata_all,['Esr1','Esr2'],groupby='Cell Subtype_no_cc',).style(cmap='Reds').swap_axes().savefig(f'{figures}/dotplot_esr1_all_celltypes.png',dpi=300,bbox_inches='tight')
+
+    sc.pl.embedding(adata_all[adata_all.obs['Lineage']=='Endothelial'],
+               color=['Cell Subtype'],
+                    basis='X_umap_Endothelial',
+               na_in_legend=False,
+               size=5,
+               frameon=False,
+               # legend_loc='on data',
+               legend_fontsize=10,
+               legend_fontoutline=1,
+               save='endo_cts.png'
+               )
+    sc.pl.embedding(adata_all[adata_all.obs['Lineage']=='Endothelial'],
+               color=['Cell Subtype_no_cc'],
+                    basis='X_umap_Endothelial_no_cc',
+               na_in_legend=False,
+               size=10,
+               frameon=False,
+               # legend_loc='on data',
+               legend_fontsize=10,
+               legend_fontoutline=1,
+               save='endo_no_cc_cts.png'
+               )
+    sc.pl.embedding(adata_all[adata_all.obs['Lineage']=='Endothelial'],
+               color=['Cell Subtype'],
+                    basis='X_umap_Endothelial_no_cc',
+                    groups = ['Proliferating Cap','Proliferating Venous EC'],
+               na_in_legend=False,
+               size=10,
+               frameon=False,
+               # legend_loc='on data',
+               legend_fontsize=10,
+               legend_fontoutline=1,
+               save='endo_no_cc_cts_pro.png'
+               )
+    sc.pl.DotPlot(adata_all,['Esr1','Esr2'],groupby='Cell Subtype_no_cc',).style(cmap='viridis').swap_axes().savefig(f'{figures}/dotplot_esr1_all_celltypes.png',dpi=300,bbox_inches='tight')
+    ct_markers = [
+    "Cdh5",
+    "Gja5",
+    "Kit",
+    "Car4",
+    "Mmrn1",
+    "Col15a1",
+    "Slc6a2",
+    "Epcam",
+    "Ager",
+    "Sftpc",
+    "Dnah12",
+    "Scgb3a2",
+    "Nrxn1",
+    "Ptprc",
+    "Plet1",
+    "Ms4a1",
+    "C1qa",
+    "Mcpt8",
+    "S100a4",
+    "Retnlg",
+    "Cd3e",
+    "Itgae",
+    "Mreg",
+    "Col1a1",
+    "Serpinf1",
+    "Hhip",
+    "Col13a1",
+    "Dsc2",
+    "Wt1",
+    "Tgfbi",
+    "Higd1b",
+    "Nkain2",
+    "Tnnt1",
+    "Ctnna3"
+]
+    sc.pl.DotPlot(adata_all,ct_markers,standard_scale='var',groupby='Cell Subtype_no_cc',).style(cmap='viridis').swap_axes().savefig(f'{figures}/dotplot_ct_markers_all_celltypes.png',dpi=300,bbox_inches='tight')
+
     sc.set_figure_params(dpi_save=300, fontsize=10, figsize=(1.5,1.5))
     sc.settings.figdir = figures
     sns.set_style('white', rc={
@@ -109,6 +259,19 @@ if __name__ == '__main__':
     size=30
     # all vessel size based figures
     adata = sc.read(f'{data}/{adata_name}_vessel_size_plot.gz.h5ad')
+    adata.obs['Treatment'] = pd.Categorical(adata.obs['Treatment'],categories=['Normoxia','Hyperoxia'])
+    sc.pl.umap(adata,
+               color='Cell Subtype',
+               groups=['Proliferating Cap', 'Proliferating Venous EC'],
+               na_in_legend=False,
+               size=size,
+               frameon=False,
+               title="",
+               # legend_loc=None,
+               legend_fontsize=10,
+               legend_fontoutline=0,
+               save='vascular_celltypes_pro.png'
+               )
     sc.pl.umap(adata,
                color='Cell Subtype_no_cc',
                na_in_legend=False,
@@ -120,6 +283,53 @@ if __name__ == '__main__':
                legend_fontoutline=0,
                save='vascular_celltypes.png'
                )
+    ## show hyperoxia's effect on vessel size score
+    sc.pl.umap(adata,
+               color='Treatment',
+               na_in_legend=False,
+               size=size,
+               frameon=False,
+               title="",
+               # legend_loc=None,
+               legend_fontsize=10,
+               legend_fontoutline=0,
+               save='vascular_treatment.png'
+               )
+    df = sc.get.obs_df(adata, ['Treatment', 'ct_s_pos', 'Vessel size score'])
+    fig, axs= plt.subplots(1, 2, figsize=(4, 2),sharey=True)
+    axs=axs.ravel()
+    for i,ct in enumerate(['Arterial', 'Venous']):
+        if ct == 'Arterial':
+            text = ['PAEC','Artery']
+            df_ct = df.loc[df['ct_s_pos'].str.contains("|".join(text), case=False, na=False)]
+            print(df_ct['ct_s_pos'].unique())
+        else:
+            text = ['PVEC', 'Vein']
+            df_ct = df.loc[df['ct_s_pos'].str.contains("|".join(text), case=False, na=False)]
+            print(df_ct['ct_s_pos'].unique())
+
+
+        hue_order = ['Normoxia', 'Hyperoxia']
+        palette = adata.uns['Treatment_colors']
+        ax=axs[i]
+        sns.kdeplot(
+            data=df_ct,
+            x="Vessel size score",
+            hue='Treatment',
+            hue_order=hue_order,
+            palette=palette,
+            common_norm=False,
+            ax=ax
+        )
+
+        ax.set_title(f'{ct} branch')
+        if i ==0:
+            axs[i].get_legend().remove()
+        else:
+            sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+    fig.tight_layout()
+    fig.savefig(f'{figures}/histplot_vessel_size_treatment.png', dpi=300, bbox_inches='tight')
+    plt.close()
     scv.set_figure_params(dpi_save=300, fontsize=10, figsize=(1.5,1.5))
     scv.settings.figdir = figures
     sns.set_style('white', rc={
@@ -256,6 +466,10 @@ if __name__ == '__main__':
                  ]
     sc.pl.dotplot(adata,gene_ls,groupby='ct_s_pos',cmap='viridis',categories_order=['PAEC L','PAEC M','PAEC S','Cap1-Artery', 'Cap1-Vein','PVEC S','PVEC M', 'PVEC L'],
                   standard_scale='var',save='size_axis.png')
+    sc.pl.dotplot(adata, ['Fbln2','Tmem100'], groupby='ct_s_pos', cmap='viridis',
+                  categories_order=['PAEC L', 'PAEC M', 'PAEC S', 'Cap1-Artery', 'Cap1-Vein', 'PVEC S', 'PVEC M',
+                                    'PVEC L'],
+                  standard_scale='var', save='fbln2_tmem100.png')
     sns.set_style('white', rc={
         'xtick.bottom': True,
         'ytick.left': True,
@@ -449,6 +663,13 @@ if __name__ == '__main__':
             # r*=r
             ax.text(x_loc, y_loc, 'r = {:.2f}\np = {:.2g}'.format(r, p), fontsize=10,
                     transform=ax.transAxes)
+
+
+        sns.set_style('white', rc={
+            'xtick.bottom': True,
+            'ytick.left': True,
+        })
+        plt.rcParams["font.family"] = "Arial"
         ## EdU images
         data = '/media/carsten/hdd/documents/manuscripts/vessel_size/images/TIF proliferation/intensity_output/Image.csv'
         df = pd.read_csv(data, header=0)
@@ -469,10 +690,10 @@ if __name__ == '__main__':
         df2['% EdU+ PVEC'] = df2['Count_EdU_Slc6A2'] / df2['Count_nuc_slc6a2'] * 100
         df2.rename_axis(index=['Mouse', 'Diameter (µm)'], inplace=True)
         df2.reset_index(inplace=True)
-        fig, axs = plt.subplots(1, 2, figsize=(3, 1.5))
+        fig, axs = plt.subplots(1, 2, figsize=(3.5, 1.5))
         plt.subplots_adjust(wspace=0.35)
         axs = axs.ravel()
-        sns.regplot(df, x=df['Diameter (µm)'], y=df['% EdU+ PVEC'], scatter_kws={'s': 15, 'linewidths': 0},
+        sns.regplot(df, x=df['Diameter (µm)'], y=df['% EdU+ PVEC'], scatter_kws={'s': 10, 'linewidths': 0},
                     line_kws={'color': 'red'}, logx=True, ci=None, ax=axs[0])
         for i in [0]:
             axs[i].set_xscale('log')
@@ -517,18 +738,24 @@ if __name__ == '__main__':
         df = df.loc[df['Intensity_TotalIntensity_DAPI'] > 100]  # Takes out misclipped vessels
         df['Mouse'] = df['FileName_composite'].str[0]
         df['Dkk2/DAPI (AU)'] = df['Intensity_MeanIntensity_large_marker'] / df['Intensity_MeanIntensity_DAPI']
+        df['Gja5/DAPI (AU)'] = df['Intensity_MeanIntensity_vessel_marker'] / df['Intensity_MeanIntensity_DAPI']
         df['Diameter (µm)'] = df[['Height_vessel_marker', 'Width_vessel_marker']].T.max() * .137
-
-        fig, ax = plt.subplots(1, 1, figsize=(1.5, 1.5))
+        fig, axs = plt.subplots(1, 2, figsize=(3.5, 1.5))
         plt.subplots_adjust(wspace=1)
-        sns.regplot(df, x=df['Diameter (µm)'], y=df['Dkk2/DAPI (AU)'], scatter_kws={'s': 15, 'linewidths': 0},
-                    line_kws={'color': 'red'}, logx=True, ci=None, ax=ax)
-        ax.set_xscale('log')
-        ax.set_xticklabels(['', '', 100])
-        ax.set_ylim([0, ax.get_ylim()[1]])
+        axs = axs.ravel()
+        sns.regplot(df, x=df['Diameter (µm)'], y=df['Dkk2/DAPI (AU)'], logx=True, ci=None,
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[0])
+        sns.regplot(df, x=df['Diameter (µm)'], y=df['Gja5/DAPI (AU)'], logx=True, ci=None,
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[1])
+        for i in [0, 1,]:
+            axs[i].set_xscale('log')
+            axs[i].set_xticklabels(['', '', 100])
+            axs[i].set_ylim([0, axs[i].get_ylim()[1]])
 
-        annotate(df, 'Diameter (µm)', 'Dkk2/DAPI (AU)', ax, 0.5, 1)
-        ax.spines[['right', 'top']].set_visible(False)
+        annotate(df, 'Diameter (µm)', 'Dkk2/DAPI (AU)', axs[0], 0.5, 1.05)
+        annotate(df, 'Diameter (µm)', 'Gja5/DAPI (AU)', axs[1], 0.5, 1.05)
+        for ax in axs:
+            ax.spines[['right', 'top']].set_visible(False)
         fig.savefig(f'{figures}/scatterplot_artery.png', dpi=300, bbox_inches='tight')
         fig.show()
 
@@ -538,18 +765,26 @@ if __name__ == '__main__':
         df = df.loc[df['Intensity_TotalIntensity_DAPI'] > 100]  # Takes out misclipped vessels
         df['Mouse'] = df['FileName_composite'].str[0]
         df['Moxd1/DAPI (AU)'] = df['Intensity_MeanIntensity_large_marker'] / df['Intensity_MeanIntensity_DAPI']
+        df['Slc6a2/DAPI (AU)'] = df['Intensity_MeanIntensity_vessel_marker'] / df['Intensity_MeanIntensity_DAPI']
         df['Diameter (µm)'] = df[['Height_vessel_marker', 'Width_vessel_marker']].T.max() * .137
 
-        fig, axs = plt.subplots(1, 1, figsize=(1.5, 1.5))
+        fig, axs = plt.subplots(1, 2, figsize=(3.5, 1.5))
         plt.subplots_adjust(wspace=1)
-
+        axs = axs.ravel()
         sns.regplot(df, x=df['Diameter (µm)'], y=df['Moxd1/DAPI (AU)'], logx=True, ci=None,
-                    scatter_kws={'s': 15, 'linewidths': 0}, line_kws={'color': 'red'}, ax=ax)
-        ax.set_xscale('log')
-        ax.set_xticklabels(['', '', 100])
-        ax.set_ylim([0, ax.get_ylim()[1]])
-        annotate(df, 'Diameter (µm)', 'Moxd1/DAPI (AU)', ax, 0.5, 1)
-        ax.spines[['right', 'top']].set_visible(False)
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[0])
+        sns.regplot(df, x=df['Diameter (µm)'], y=df['Slc6a2/DAPI (AU)'], logx=True, ci=None,
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[1])
+
+        for i in [0, 1,]:
+            axs[i].set_xscale('log')
+            axs[i].set_xticklabels(['', '', 100])
+            axs[i].set_ylim([0, axs[i].get_ylim()[1]])
+
+        annotate(df, 'Diameter (µm)', 'Moxd1/DAPI (AU)', axs[0], 0.5, 1.05)
+        annotate(df, 'Diameter (µm)', 'Slc6a2/DAPI (AU)', axs[1], 0.5, 1.05)
+        for ax in axs:
+            ax.spines[['right', 'top']].set_visible(False)
         fig.savefig(f'{figures}/scatterplot_vein.png', dpi=300, bbox_inches='tight')
         fig.show()
 
@@ -560,6 +795,8 @@ if __name__ == '__main__':
         df['Mouse'] = df['FileName_DAPI'].str[0]
         df['Fbln2/DAPI (AU)'] = df['Intensity_MeanIntensity_Fbln2'] / df['Intensity_MeanIntensity_DAPI']
         df['Tmem100/DAPI (AU)'] = df['Intensity_MeanIntensity_Tmem100'] / df['Intensity_MeanIntensity_DAPI']
+        df['Tmem100/DAPI (AU)'] = df['Intensity_MeanIntensity_Tmem100'] / df['Intensity_MeanIntensity_DAPI']
+        df['Pecam1/DAPI (AU)'] = df['Intensity_MeanIntensity_Cd31'] / df['Intensity_MeanIntensity_DAPI']
         df['Fbln2/Tmem100 (AU)'] = np.log10(df['Intensity_MeanIntensity_Fbln2'] / df['Intensity_MeanIntensity_Tmem100'])
         df['Diameter (µm)'] = df[['Height_Cd31', 'Width_Cd31']].T.max() * .137
         df = df.loc[df['Mouse'] != '4']  # mouse 4 has low quality in Fbln2 channel
@@ -568,23 +805,53 @@ if __name__ == '__main__':
                      ]  # miscropped images
 
         df = df.loc[~df['FileName_Cd31'].isin(blacklist)]
-        fig, axs = plt.subplots(1, 2, figsize=(3, 1.5))
+        fig, axs = plt.subplots(1, 3, figsize=(5.25, 1.5))
         plt.subplots_adjust(wspace=1)
         axs = axs.ravel()
         sns.regplot(df, x=df['Diameter (µm)'], y=df['Tmem100/DAPI (AU)'], logx=True, ci=None,
-                    scatter_kws={'s': 15, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[0])
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[0])
         sns.regplot(df, x=df['Diameter (µm)'], y=df['Fbln2/DAPI (AU)'], logx=True, ci=None,
-                    scatter_kws={'s': 15, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[1])
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[1])
+        sns.regplot(df, x=df['Diameter (µm)'], y=df['Pecam1/DAPI (AU)'], logx=True, ci=None,
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[2])
 
-        for i in [0, 1]:
+        for i in [0, 1,2]:
             axs[i].set_xscale('log')
             axs[i].set_xticklabels(['', '', 100])
             axs[i].set_ylim([0, axs[i].get_ylim()[1]])
 
-        annotate(df, 'Diameter (µm)', 'Tmem100/DAPI (AU)', axs[0], 0.5, 1)
-        annotate(df, 'Diameter (µm)', 'Fbln2/DAPI (AU)', axs[1], 0.5, 1)
-
+        annotate(df, 'Diameter (µm)', 'Tmem100/DAPI (AU)', axs[0], 0.5, 1.05)
+        annotate(df, 'Diameter (µm)', 'Fbln2/DAPI (AU)', axs[1], 0.5, 1.05)
+        annotate(df, 'Diameter (µm)', 'Pecam1/DAPI (AU)', axs[2], 0.5, 1.05)
         for ax in axs:
             ax.spines[['right', 'top']].set_visible(False)
         fig.savefig(f'{figures}/scatterplots_fbln2_tmem100_diameter.png', dpi=300, bbox_inches='tight')
+        fig.show()
+
+        ## Adgrg6 images
+        data = '/media/carsten/hdd/documents/manuscripts/vessel_size/images/Adgrg6 TIF/intensity_output/Image.csv'
+        df = pd.read_csv(data, header=0)
+        df = df.loc[df['Intensity_TotalIntensity_DAPI'] > 100]  # Takes out misclipped vessels
+        df['Mouse'] = df['FileName_composite'].str[0]
+        df['Adgrg6/DAPI (AU)'] = df['Intensity_MeanIntensity_medium_marker'] / df['Intensity_MeanIntensity_DAPI']
+        df['Pecam1/DAPI (AU)'] = df['Intensity_MeanIntensity_vessel_marker'] / df['Intensity_MeanIntensity_DAPI']
+        df['Adgrg6/Pecam1 (AU)'] = df['Intensity_MeanIntensity_medium_marker'] / df['Intensity_MeanIntensity_vessel_marker']
+
+        df['Diameter (µm)'] = df[['Height_vessel_marker', 'Width_vessel_marker']].T.max() * .137
+        fig, axs = plt.subplots(1, 2, figsize=(3.5, 1.5))
+        plt.subplots_adjust(wspace=1)
+        axs = axs.ravel()
+        sns.scatterplot(df, x=df['Diameter (µm)'], y=df['Adgrg6/DAPI (AU)'],s=10, linewidths = 0,  ax=axs[0])
+        sns.regplot(df, x=df['Diameter (µm)'], y=df['Pecam1/DAPI (AU)'], logx=True, ci=None,
+                    scatter_kws={'s': 10, 'linewidths': 0}, line_kws={'color': 'red'}, ax=axs[1])
+        for i in [0, 1,]:
+            axs[i].set_xscale('log')
+            axs[i].set_xticklabels(['', '', 100])
+            axs[i].set_ylim([0, axs[i].get_ylim()[1]])
+
+        annotate(df, 'Diameter (µm)', 'Pecam1/DAPI (AU)', axs[1], 0.5, 1.05)
+
+        for ax in axs:
+            ax.spines[['right', 'top']].set_visible(False)
+        fig.savefig(f'{figures}/scatterplot_adgrg6_images.png', dpi=300, bbox_inches='tight')
         fig.show()

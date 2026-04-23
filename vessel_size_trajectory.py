@@ -29,6 +29,10 @@ comps = {
                  'root_ct':'Cap1',
                  'terminal_cts':['Arterial EC', 'Venous EC']
                  },
+    'vascular_endothelial':{'cts':['Arterial EC', 'Cap1','Cap1_Cap2','Cap2', 'Venous EC'],
+                 'root_ct':'Cap1',
+                 'terminal_cts':['Arterial EC', 'Venous EC','Cap2']
+                 },
 
 }
 celltype = 'Cell Subtype_no_cc'
@@ -45,6 +49,7 @@ def run_velocity_routine(adata,adata_v,celltype,root_ct,terminal_cts,figure_dir,
     adata_v_trim = adata_v[adata.obs_names, :].copy()
     adata_v_trim = scv.utils.merge(adata, adata_v_trim)
     adata_v_trim.X = adata_v_trim.layers['raw'].copy()
+    # del adata_v_trim.layers['log1p_cc_regress']
     scv.pp.filter_and_normalize(adata_v_trim, enforce=True)
     scv.pp.moments(adata_v_trim, n_pcs=30, n_neighbors=30)
     scv.tl.recover_dynamics(adata_v_trim)
@@ -57,12 +62,12 @@ def run_velocity_routine(adata,adata_v,celltype,root_ct,terminal_cts,figure_dir,
         scv.tl.velocity_graph(adata_v_trim)
         scv.pl.velocity_embedding_stream(adata_v_trim, basis='umap', density=3, color=celltype,legend_loc='right margin',
                                          title='', show=False, save=f'{mode}_velocity.png')
-    scv.tl.latent_time(adata_v_trim)
-    scv.tl.terminal_states(adata_v_trim)
-    scv.tl.velocity_pseudotime(adata_v_trim)
+    # scv.tl.latent_time(adata_v_trim)
+    # scv.tl.terminal_states(adata_v_trim)
+    # scv.tl.velocity_pseudotime(adata_v_trim)
     # scv.tl.paga(adata_v_trim, groups=celltype)
-    scv.pl.scatter(adata_v_trim, color=["root_cells", "end_points"],
-                   save='_velocity_states.png')
+    # scv.pl.scatter(adata_v_trim, color=["root_cells", "end_points"],
+    #                save='_velocity_states.png')
     # scv.pl.paga(adata_v_trim, groups=celltype,save='_celltype_paths.png')
     adata_v_trim.X = adata_v_trim.layers['log1p'].copy()
     palantir.utils.run_diffusion_maps(adata_v_trim,
@@ -153,7 +158,10 @@ def run_velocity_routine(adata,adata_v,celltype,root_ct,terminal_cts,figure_dir,
     sc.pl.embedding(
         adata_v_trim,
         basis="umap",
-        color=["dpt_pseudotime", "palantir_pseudotime",'velocity_pseudotime','latent_time'],
+        color=["dpt_pseudotime", "palantir_pseudotime",
+               # 'velocity_pseudotime',
+               # 'latent_time'
+               ],
         color_map="viridis",
         show=False,
         save='_pseudotimes.png'
@@ -184,5 +192,15 @@ if __name__ == '__main__':
         adata_cts = adata[adata.obs[celltype].isin(cts)].copy()
         adata_cts.X = adata_cts.layers['log1p_cc_regress'].copy()
         run_velocity_routine(adata_cts,adata_velocity,celltype,root_ct,terminal_cts,figures_comp,f'{data}/{adata_name}_{comp}_velocity.gz.h5ad',umap=True)
+        if comp=='vessel_size':
+            for treatment in adata_cts.obs['Treatment'].unique():
+                figures_comp_treat = os.path.join(figures_comp,treatment)
+                os.makedirs(figures_comp_treat, exist_ok=True)
+                adata_cts = adata[(adata.obs[celltype].isin(cts))&(adata.obs['Treatment']==treatment)].copy()
+                adata_cts.X = adata_cts.layers['log1p_cc_regress'].copy()
+                run_velocity_routine(adata_cts, adata_velocity, celltype, root_ct, terminal_cts, figures_comp_treat,
+                                     f'{data}/{adata_name}_{comp}_{treatment}_velocity.gz.h5ad', umap=True)
+
+
 
 
