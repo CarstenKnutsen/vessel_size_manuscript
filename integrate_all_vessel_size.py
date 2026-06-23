@@ -99,8 +99,6 @@ if __name__ == '__main__':
     gene_dict = {}
     gp = GProfiler(return_dataframe=True)
     for ds in adata_dict:
-        # if ds == 'Zhao 2024':
-        #     continue
         adata = adata_dict[ds]
         print(ds)
         gene_ls = adata.uns['large_genes'].tolist() + adata.uns['small_genes'].tolist()
@@ -112,22 +110,62 @@ if __name__ == '__main__':
         gene_dict[ds] = gene_ls
     upset = from_contents(gene_dict)
     membership_df = upset.reset_index()
-    groups = membership_df.columns[:-1]  # set columns
-    item_col = membership_df.columns[-1]  # item column
-    membership_df["intersection"] = (
-        membership_df[groups]
-        .apply(lambda r: ",".join(groups[r]), axis=1)
-    )
-    intersection_lists = (
-        membership_df.groupby("intersection")[item_col]
-        .apply(list)
-        .reset_index()
-    )
-    intersection_lists.to_csv(f"{figures_out}/upset_intersections.csv", index=False)
+    membership_df = membership_df.set_index('id')
+    membership_df['# of datasets used for scoring'] = membership_df.sum(axis=1)
+    membership_df.sort_values('# of datasets used for scoring', ascending=False).to_csv(f"{figures_out}/membership_df.csv")
     print(upset)
     ax_dict = UpSet(upset, sort_by='cardinality',subset_size="count").plot()
     plt.savefig(f'{figures_out}/upset_plot_shared_genes_signature.png', dpi=300, bbox_inches='tight')
     plt.close()
+    ## make overlap barplot
+    membership_df = upset.reset_index()
+    membership_df = membership_df.set_index('id')
+    overlap_counts = {}
+    total_true = membership_df.sum(axis=0)
+
+    for col in membership_df.columns:
+        # True in any OTHER dataset
+        other_true = membership_df.drop(columns=col).any(axis=1)
+
+        # True in this dataset AND another dataset
+        overlap = membership_df[col] & other_true
+        unique = membership_df[col] & ~other_true
+
+        overlap_counts[col] = overlap.sum()
+
+    overlap_counts = pd.Series(overlap_counts)
+
+    plot_df = pd.DataFrame({
+        "Dataset": membership_df.columns,
+        "Total genes used": total_true.values,
+        "Overlap with 1+ dataset": overlap_counts.values
+    })
+
+    plot_long = plot_df.melt(
+        id_vars="Dataset",
+        var_name="Category",
+        value_name="Count"
+    )
+
+    fig, ax = plt.subplots(1, 1, figsize=(2, 2))
+    plot_long = plot_long.sort_values('Dataset')
+    ax = sns.barplot(
+        data=plot_long,
+        x="Dataset",
+        y="Count",
+        hue="Category",
+        dodge=False,
+    )
+    print(plot_df)
+    print(plot_long)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+    sns.despine()
+    plt.legend(frameon=False)
+    sns.move_legend(ax, "upper left", bbox_to_anchor=(0.55, 1))
+    ax.set_ylabel('# genes used\nin vessel size score')
+    ax.set_xlabel('')
+    fig.savefig(f'{figures_out}/barplot_overlap_dataset.png', dpi=300, bbox_inches='tight')
+
     ## Make same plots of genes to compare across datasets
     gene_ls_dict = {'shared_size': [
         'Ccdc85a',
@@ -261,6 +299,3 @@ if __name__ == '__main__':
     ax.set_xlabel('Vessel size score')
     ax.set_ylabel('Vessel size score\nneighbor median')
     fig.savefig(f'{figures_out}/violinplot_neighbors.png', dpi=300, bbox_inches='tight')
-
-
-

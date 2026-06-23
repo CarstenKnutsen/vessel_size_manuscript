@@ -18,6 +18,7 @@ python vessel_size_figures.py
 python export_clean_h5ad.py
 python hurskainen_vessel_size.py
 python tabula_muris_senis_vessel_size.py
+python zhao_vessel_size.py
 python bhattacharya_vessel_size.py
 python lungmap_vessel_size.py
 python tabula_sapiens_vessel_size.py

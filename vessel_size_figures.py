@@ -670,6 +670,11 @@ if __name__ == '__main__':
             'ytick.left': True,
         })
         plt.rcParams["font.family"] = "Arial"
+        import pandas as pd
+        import statsmodels.api as sm
+        from statsmodels.formula.api import ols
+        from scipy.stats import shapiro, levene
+
         ## EdU images
         data = '/media/carsten/hdd/documents/manuscripts/vessel_size/images/TIF proliferation/intensity_output/Image.csv'
         df = pd.read_csv(data, header=0)
@@ -714,19 +719,45 @@ if __name__ == '__main__':
         axs[1].legend(unique_handles, unique_labels, title='Treatment', loc='upper left', bbox_to_anchor=(1, 1))
         axs[1].legend_.set_frame_on(False)
 
+        df3 = df2.rename(columns={
+            "Diameter (µm)": "Diameter_um",
+            "Treatment": "Treatment",
+            "% EdU+ PVEC": "measurement"  # change if your response column has a different name
+        }).copy()
+
+        df3["Diameter_um"] = df3["Diameter_um"].astype("category")
+        df3["Treatment"] = df3["Treatment"].astype("category")
+
+        model = ols("measurement ~ C(Treatment) * C(Diameter_um)", data=df3).fit()
+        print(model.params)
+        anova_table = sm.stats.anova_lm(model, typ=2)
+        print(anova_table)
+
+        print("Shapiro p-value:", shapiro(model.resid).pvalue)
+
+        groups = [
+            g["measurement"].values
+            for _, g in df3.groupby(["Diameter_um", "Treatment"])
+        ]
+        print("Levene p-value:", levene(*groups).pvalue)
+        test_le50 = model.t_test(
+            'C(Treatment)[T.N] = 0'
+        )
+
+        print(test_le50)
+
+        test_gt50 = model.t_test(
+    'C(Treatment)[T.N] + '
+    'C(Treatment)[T.N]:C(Diameter_um)[T.>50] = 0')
+
+        print(test_gt50)
+        pvals = [test_le50.pvalue, test_gt50.pvalue]
+
         i = 0
         for size in df2['Diameter (µm)'].unique():
-            df_test = df2.loc[df2['Diameter (µm)'] == size]
-            norm = df_test[df_test['Treatment'] == 'N']['% EdU+ PVEC']
-            hyper = df_test[df_test['Treatment'] == 'H']['% EdU+ PVEC']
-
-            t_statistic, p_value = sp.stats.ttest_ind(norm, hyper, nan_policy='omit', equal_var=True)
-            print(f'In {size}')
-            print(f"Independent t-test:")
-            print(f"T-statistic: {t_statistic}")
-            print(f"P-value: {p_value}")
+            pvalue = pvals[i]
             y_coord = df2['% EdU+ PVEC'].max() + 0.25  # Adjust this value as needed
-            axs[1].text(x=i, y=y_coord, s=f'p\n{p_value:.3f}', ha='center', va='bottom', fontsize=10, color='black')
+            axs[1].text(x=i, y=y_coord, s=f'p\n{pvalue:.3f}', ha='center', va='bottom', fontsize=10, color='black')
             i += 1
         axs[1].set_ylabel('')
         fig.savefig(f'{figures}/scatterplots_vein_EdU.png', dpi=300, bbox_inches='tight')

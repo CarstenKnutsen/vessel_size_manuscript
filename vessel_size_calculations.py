@@ -109,80 +109,75 @@ if __name__ == '__main__':
             corr_dfs[ct]=df
 
         # find common correlations and find overlap
-        top_n_genes=50
-        arterial_large_genes = corr_dfs['Arterial EC'].head(top_n_genes).index.tolist()
-        venous_large_genes = corr_dfs['Venous EC'].head(top_n_genes).index.tolist()
-        arterial_small_genes = corr_dfs['Arterial EC'].tail(top_n_genes).index.tolist()[::-1]
-        venous_small_genes = corr_dfs['Venous EC'].tail(top_n_genes).index.tolist()[::-1]
+        if run == 'all':
+            for top_n_genes in [50,150]:
+                arterial_large_genes = corr_dfs['Arterial EC'].head(top_n_genes).index.tolist()
+                venous_large_genes = corr_dfs['Venous EC'].head(top_n_genes).index.tolist()
+                arterial_small_genes = corr_dfs['Arterial EC'].tail(top_n_genes).index.tolist()[::-1]
+                venous_small_genes = corr_dfs['Venous EC'].tail(top_n_genes).index.tolist()[::-1]
 
+                ##Create the Venn diagrams
+                ## large top 50
+                venn = venn2([set(arterial_large_genes), set(venous_large_genes)],
+                             set_labels=('Arterial', 'Venous'),
+                             set_colors=('#4A90E2', '#E35D6A'),
+                             alpha=0.7)
+                for text in venn.set_labels:
+                    text.set_fontsize(12)
+                for text in venn.subset_labels:
+                    if text:
+                        text.set_fontsize(12)
+                plt.title(f"Top {top_n_genes} genes positively correlated with pseudotime")
+                plt.savefig(f'{figures}/venn_diagram_large_{top_n_genes}.png',dpi=300,bbox_inches='tight')
+                plt.close()
 
+                ## Create the Venn diagrams
+                ## small top 50
+                venn = venn2([set(arterial_small_genes), set(venous_small_genes)],
+                             set_labels=('Arterial', 'Venous'),
+                             set_colors=('#4A90E2', '#E35D6A'),
+                             alpha=0.7)
+                for text in venn.set_labels:
+                    text.set_fontsize(12)
+                for text in venn.subset_labels:
+                    if text:
+                        text.set_fontsize(12)
+                plt.title(f"Top {top_n_genes} genes negatively correlated with pseudotime")
+                plt.savefig(f'{figures}/venn_diagram_small_{top_n_genes}.png',dpi=300,bbox_inches='tight')
+                plt.close()
 
-        ##Create the Venn diagrams
-        ## large top 50
-        venn = venn2([set(arterial_large_genes), set(venous_large_genes)],
-                     set_labels=('Arterial', 'Venous'),
-                     set_colors=('#4A90E2', '#E35D6A'),
-                     alpha=0.7)
-        for text in venn.set_labels:
-            text.set_fontsize(12)
-        for text in venn.subset_labels:
-            if text:
-                text.set_fontsize(12)
-        plt.title("Top 50 genes positively correlated with pseudotime")
-        plt.savefig(f'{figures}/venn_diagram_large_50.png',dpi=300,bbox_inches='tight')
-        plt.close()
+                ## calculate  vessel size
+                large_genes = [x for x in arterial_large_genes if x in venous_large_genes]
+                small_genes = [x for x in arterial_small_genes if x in venous_small_genes]
+                if top_n_genes==50:
+                    adata.uns['large_genes'] = large_genes
+                    adata.uns['small_genes'] = small_genes
+                else:
+                    adata.uns[f'large_genes_{top_n_genes}'] = large_genes
+                    adata.uns[f'small_genes_{top_n_genes}'] = small_genes
 
-        ## Create the Venn diagrams
-        ## small top 50
-        venn = venn2([set(arterial_small_genes), set(venous_small_genes)],
-                     set_labels=('Arterial', 'Venous'),
-                     set_colors=('#4A90E2', '#E35D6A'),
-                     alpha=0.7)
-        for text in venn.set_labels:
-            text.set_fontsize(12)
-        for text in venn.subset_labels:
-            if text:
-                text.set_fontsize(12)
-        plt.title("Top 50 genes negatively correlated with pseudotime")
-        plt.savefig(f'{figures}/venn_diagram_small_50.png',dpi=300,bbox_inches='tight')
-        plt.close()
+                genes = large_genes + small_genes
+                sc.set_figure_params(dpi_save=300, fontsize=10, figsize=(1.5,1.5))
 
-        ## calculate  vessel size
-        large_genes = [x for x in arterial_large_genes if x in venous_large_genes]
-        small_genes = [x for x in arterial_small_genes if x in venous_small_genes]
-        adata.uns['large_genes'] = large_genes
-        adata.uns['small_genes'] = small_genes
-        genes = large_genes + small_genes
-        sc.set_figure_params(dpi_save=300, fontsize=10, figsize=(1.5,1.5))
-
-        sc.pl.umap(adata,color=genes,hspace=0.5,save='size_genes_50.png')
-        corr_df_50 = pd.DataFrame([small_genes,large_genes],index=None).T
-        corr_df_50.columns = ['small_genes','large_genes']
-        corr_df_50.to_csv(f'{figures}/top50_shared_corr_df.csv')
-        sc.tl.score_genes(adata,large_genes,score_name='large_score')
-        sc.tl.score_genes(adata,small_genes,score_name='small_score')
-        adata.obs['Vessel size score'] = adata.obs['large_score'] - adata.obs['small_score']
-        adata.obs['Vessel size score'] = normalize_dataframe(adata.obs[['Vessel size score']])
-        adata.obs['Vessel size category'] = pd.cut(adata.obs['Vessel size score'], bins=4,labels=['capillary','small','medium','large'])
-        sc.pl.umap(adata,color='Cell Subtype_no_cc',save='')
-
-        ### extend list for metascape
-
-        top_n_genes=150
-        arterial_large_genes = corr_dfs['Arterial EC'].head(top_n_genes).index.tolist()
-        venous_large_genes = corr_dfs['Venous EC'].head(top_n_genes).index.tolist()
-        arterial_small_genes = corr_dfs['Arterial EC'].tail(top_n_genes).index.tolist()[::-1]
-        venous_small_genes = corr_dfs['Venous EC'].tail(top_n_genes).index.tolist()[::-1]
-        large_genes = [x for x in arterial_large_genes if x in venous_large_genes]
-        small_genes = [x for x in arterial_small_genes if x in venous_small_genes]
-        corr_df_150 = pd.DataFrame([small_genes,large_genes],index=None).T
-        corr_df_150.columns = ['small_genes','large_genes']
-        corr_df_150.to_csv(f'{figures}/top150_shared_corr_df.csv')
-        genes = large_genes + small_genes
-        fig = palantir.plot.plot_gene_trend_heatmaps(adata, genes,cmap='viridis')
-        fig.tight_layout()
-        fig.savefig(f'{figures}/palantir_heatmap_gene_trends_150.png')
-        plt.close()
+                sc.pl.umap(adata,color=genes,hspace=0.5,save=f'size_genes_{top_n_genes}.png')
+                corr_df_50 = pd.DataFrame([small_genes,large_genes],index=None).T
+                corr_df_50.columns = ['small_genes','large_genes']
+                corr_df_50.to_csv(f'{figures}/top{top_n_genes}_shared_corr_df.csv')
+                sc.tl.score_genes(adata,large_genes,score_name='large_score')
+                sc.tl.score_genes(adata,small_genes,score_name='small_score')
+                if top_n_genes==50:
+                    label = 'Vessel size'
+                else:
+                    label = f'Vessel size {top_n_genes}'
+                adata.obs[f'{label} score'] = adata.obs['large_score'] - adata.obs['small_score']
+                adata.obs[f'{label} score'] = normalize_dataframe(adata.obs[[f'{label} score']])
+                adata.obs[f'{label} category'] = pd.cut(adata.obs[f'{label} score'], bins=4,labels=['capillary','small','medium','large'])
+                genes = large_genes + small_genes
+                fig = palantir.plot.plot_gene_trend_heatmaps(adata, genes, cmap='viridis')
+                fig.tight_layout()
+                fig.savefig(f'{figures}/palantir_heatmap_gene_trends_{top_n_genes}.png')
+                plt.close()
+        print(adata)
         sc.pl.umap(adata,
                                   color='Cell Subtype_no_cc',
                                   na_in_legend=False,
@@ -249,8 +244,23 @@ if __name__ == '__main__':
                 df.set_index("names")
                 df["pct_difference"] = df["pct_nz_group"] - df["pct_nz_reference"]
                 df.sort_values('pct_difference',ascending=False).to_excel(writer, sheet_name=f"{ct} v rest"[:31])
-        adata.obs[['palantir_pseudotime','Vessel size score','ct_s_pos']].to_csv(f'{figures}/select_obs.csv')
+        df = adata.obs[['palantir_pseudotime','Vessel size score','Vessel size 150 score','ct_s_pos']]
+        df.to_csv(f'{figures}/select_obs.csv')
         if run =='all':
             adata.write(f'{data}/{adata_name}_vessel_size_plot.gz.h5ad',compression='gzip')
+            fig, axs = plt.subplots(1, 2, figsize=(4, 2))
+            axs = axs.ravel()
+            plt.subplots_adjust(wspace=0.75)
+            delta = df['Vessel size score'] - df['Vessel size 150 score']
+            sns.regplot(x=df['Vessel size score'], y=df['Vessel size 150 score'], scatter_kws={'s': 3, 'linewidths': 0},
+                        line_kws={'color': 'red'}, ci=None, ax=axs[0])
+            axs[0].set_xlabel('Vessel size score\50')
+            axs[0].set_ylabel('Vessel size score\n150')
+            r, p = sp.stats.pearsonr(df['Vessel size score'], df['Vessel size 150 score'])
+            axs[0].text(0.5, 1.05, 'r = {:.2f}'.format(r, p), fontsize=10,
+                        transform=axs[0].transAxes)
+            sns.violinplot(delta, ax=axs[1])
+            axs[1].set_ylabel('Vessel size score delta')
+            fig.savefig(f'{figures}/vessel_size_calculation_top_n_genes_comparison.png', bbox_inches='tight', dpi=300)
         else:
             adata.write(f'{data}/{adata_name}_vessel_size_{run}_plot.gz.h5ad', compression='gzip')
